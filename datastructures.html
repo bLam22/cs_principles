@@ -16,6 +16,9 @@
         function dog(name, age){
             this.name = name;
             this.age = age;
+            this.meow = function(){
+                console.log("meow...");
+            }
         }
 
         // this is a class
@@ -43,8 +46,11 @@
 
         }
 
+        // create instance of dog constructor function
         let myDog = new dog("Doofus", 2);
+        // create instance of Dog class
         let yourDog = new Dog("Roofus", 4);
+        // call method from yourDog instance
         yourDog.bark();
         console.log(myDog.name);
         console.log(myDog.age);
