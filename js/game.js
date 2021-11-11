@@ -1,8 +1,11 @@
 // global variables
 let canvas;
 let ctx;
-let WIDTH = 600;
+let WIDTH = 704;
 let HEIGHT = 400;
+let TILESIZE = 16;
+let allSprites = [];
+let walls = [];
 
 // get user input from keyboard
 let keysDown = {};
@@ -19,44 +22,15 @@ let gamePlan = `
 ......##############..
 ......................`;
 
-const levelChars = {
-    ".": "empty",
-    "#": Square,
-}
 
-function buildLevel(plan, width){
-    // setup arrays to hold information from gameplan
-    let newRow = [];
-    let newGrid = [];
-
-    for (i of plan){
-        if (i != "\n"){
-            newRow.push(i);
-        }
-        if (newRow.lenght % width == 0 && newRow.lenght != 0){
-            console.log(newRow.lenght);
-            newGrid.push(newRow);
-            newRow = [];
-            console.log(newGrid);
-        }
-    }
-    console.log(newRow);
-    return newGrid;
-}
-
-buildLevel(gamePlan, 22);
-
-addEventListener("keydown", function (event){
+addEventListener("keydown", function (event) {
     keysDown[event.key] = true;
     console.log("key down is " + keysDown[event.key]);
-    console.log(keysDown);
 }, false);
 
-addEventListener("keyup", function (event){
+addEventListener("keyup", function (event) {
     // keysUp[event.key] = true;
     delete keysDown[event.key];
-    console.log(keysDown);
-    console.log(keysUp);
 }, false);
 
 // here we use init (short for initialize) to setup the canvas and context
@@ -72,39 +46,31 @@ function init() {
     gameLoop();
 }
 
-class Square {
-    constructor(id, x, y, speed, w, h, color) {
-        this.id = id;
+class Sprite {
+    constructor(x, y, w, h, color) {
         this.x = x;
         this.y = y;
-        this.speed = speed;
         this.w = w;
         this.h = h;
         this.color = color;
-        }
-        create(x, y, speed, w, h, color){
-            return new Square(x, y, speed, w, h, color);
-        }
-
-        update(){
-            if (this.x >= WIDTH-this.w || this.x < 0){
-                // console.log("I fell off the side!!!!")
-                this.speed = -this.speed;
-            }
-            this.x += this.speed;
-            // this.y += Math.random()*5*this.speed;
-            // console.log(this.x);
-        };
-        draw(){
-            ctx.fillStyle = this.color;
-            ctx.fillRect(this.x, this.y, this.w, this.h);
-        };
+        allSprites.push(this);
     }
+    get type() {
+        return "sprite";
+    }
+    create(x, y, w, h, color) {
+        return new Sprite(x, y, w, h, color);
+    }
+    draw() {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.w, this.h);
+    };
+}
 
-class Player extends Square {
-    constructor(id, x, y, speed, w, h, color, hitpoints){
-        super(id, x, y, speed, w, h, color);
-        this.id = id;
+
+class Player extends Sprite {
+    constructor(x, y, speed, w, h, color, hitpoints) {
+        super(x, y, w, h, color);
         this.x = x;
         this.y = y;
         this.speed = speed;
@@ -113,79 +79,157 @@ class Player extends Square {
         this.color = color;
         this.hitpoints = hitpoints;
         // console.log(this.hitpoints);
-        }
-        update(){
-            if ('w' in keysDown){
-                this.y -= this.speed;
-            }
-            if ('a' in keysDown){
-                this.x -= this.speed;
-            }
-            if ('s' in keysDown){
-                this.y += this.speed;
-            }
-            if ('d' in keysDown){
-                this.x += this.speed;
-            }
-            
-            // this.y += Math.random()*5*this.speed;
-            // console.log(this.x);
-        };
+        
     }
+    collideWith(obj){
+        if (this.x + this.w > obj.x &&
+            this.x < obj.x + obj.w &&
+            this.y + this.h > obj.y &&
+            this.y < obj.y + obj.h
+            ){
+                console.log('collides with ' + obj);
+                return true;
+            }
+    }
+    get type() {
+        return "player";
+    }
+    input() {
+        if ('w' in keysDown) {
+            this.dy = -1;
+            console.log("dy is: " + this.dy)
+            this.y -= this.speed;
+        }
+        if ('a' in keysDown) {
+            this.dx = -1;
+            console.log("dx is: " + this.dx)
+            this.x -= this.speed;
+        }
+        if ('s' in keysDown) {
+            this.dy = 1
+            console.log("dy is: " + this.dy)
+            this.y += this.speed;
 
-    function readLevel() {
-        /* 
-        Create array to hold starting actors or elements on the screen
-        */
-        let startActors = [];
-        /* read game plan - the 'i' below will be the 'y' value */
-        for (i of gamePlan) {
-            console.log(i + " will be the y value...");
-            /* checks to see if we hit a newline;
-            if not, set variable 'type' to the current level character
-            in hte object we created called levelChars
+        }
+        if ('d' in keysDown) {
+            this.dx = 1;
+            console.log("dx is: " + this.dx)
+            this.x += this.speed;
+        }
+
+    }
+    update() {
+        this.input();
+        // this.y += Math.random()*5*this.speed;
+        // console.log(this.x);
+    };
+}
+
+class Wall extends Sprite{
+    constructor(x, y, w, h, color){
+        super(x, y, w, h, color);
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.color = color;
+    }
+    create(x, y, w, h, color) {
+        return new Wall(x, y, w, h, color);
+    }
+    get type(){
+        return "wall";
+    }
+}
+const levelChars = {
+    ".": "empty",
+    "#": Wall,
+};
+
+function makeGrid(plan, width) {
+    let newGrid = [];
+    let newRow = [];
+    for (i of plan) {
+        if (i != "\n") {
+            newRow.push(i);
+        }
+        if (newRow.length % width == 0 && newRow.length != 0) {
+            newGrid.push(newRow);
+            newRow = [];
+        }
+    }
+    return newGrid;
+}
+
+console.log("here's the grid...\n" + makeGrid(gamePlan, 22));
+
+function readLevel(grid) {
+    let startActors = [];
+    // note the change from i to x and y
+    for (y in grid) {
+        for (x in grid[y]) {
+            /*              crate a variable based on the current
+            item in the two dimensional array being read
+             */
+            let ch = grid[y][x];
+            /* if the character is not a new line character
+            create a variable from the value attached to the 
+            key in the object, e.g. 
+
+            const levelChars = {
+                ".": "empty",
+                "#": Square,
+            };
+
+            where "." is the key and the value is "empty"
+            In the case of "#", the key is "#" and the value
+            is the Square class.
+            
             */
-            if (i != "\n") {
-                let type = levelChars[i];
-                /* if level type is a 'string', not a class
-                push it into start actors as is
-                
-                */
+            if (ch != "\n") {
+                let type = levelChars[ch];
                 if (typeof type == "string") {
                     startActors.push(type);
-                    console.log('string found');
-                }
-                /* if it is not a string, it will be a class
-                as we've written it; if it is a class, push a 
-                newly created object into the startActors, 
-                with all necessary arguments or values.
-                In this case, x,y,w,h,color
-                
-                */
-                else {
-                    i = new type;
-                    startActors.push(i.create(10, 20, 30, 40, 'red'))
+                } else {
+                    let t = new type;
+                    // let id = Math.floor(100*Math.random());
+                    /*  Here we can use the x and y values from reading the grid, 
+                        then adjust them based on the tilesize
+                         */
+                    startActors.push(t.create(x * TILESIZE, y * TILESIZE, TILESIZE, TILESIZE, 'red'))
                 }
             }
         }
-        console.log(startActors);
     }
-    
+    return startActors;
+}
+
+
+let currentLevel = readLevel(makeGrid(gamePlan, 22))
+console.log('current level');
+console.log(currentLevel);
 
 // instantiations...
-let player1 = new Player("Me", WIDTH/2, HEIGHT/2, 1, 40, 40, 'rgb(100, 100, 100)', 100);
-let oneSquare = new Square("Bob", 10, 10, 1, 50, 50, 'rgb(200, 100, 200)');
-let twoSquare = new Square("Chuck", 60, 60, 5, 100, 100, 'rgb(200, 200, 0)');
-let threeSquare = new Square("Bill", 70, 70, 3, 25, 25, 'rgb(100, 100, 222)');
+let player1 = new Player(WIDTH / 2, HEIGHT / 2, 1, TILESIZE, TILESIZE, 'rgb(100, 100, 100)', 100);
+// let oneSquare = new Square("Bob", 10, 10, 1, 50, 50, 'rgb(200, 100, 200)');
+// let twoSquare = new Square("Chuck", 60, 60, 5, 100, 100, 'rgb(200, 200, 0)');
+// let threeSquare = new Square("Bill", 70, 70, 3, 25, 25, 'rgb(100, 100, 222)');
 
-let allSprites = [oneSquare, twoSquare, threeSquare, player1];
+console.log(allSprites);
+console.log(walls);
 
 
-function update(){
-    for (i of allSprites){
-        // console.log(i);
-        i.update();
+
+function update() {
+    for (i of allSprites) {
+        if (i.type == "wall") {
+            // console.log(i)
+            if (player1.collideWith(i)) {
+                console.log("player collided with walls")
+            }
+        }
     }
+    player1.update();
 
     // oneSquare.update();
     // twoSquare.update();
@@ -193,7 +237,7 @@ function update(){
 // we now have just the drawing commands in the function draw
 function draw() {
     ctx.clearRect(0, 0, WIDTH, HEIGHT);
-    for (i of allSprites){
+    for (i of allSprites) {
         // console.log(i);
         i.draw();
     }
